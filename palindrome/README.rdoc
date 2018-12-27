@@ -1,0 +1,5 @@
+Palindrome of String - By Chitresh Goyal
+http://www.facebook.com/chitresh.goyal
+
+palindrome: 
+       'abab' => baba, aabb,bbaa, abba
