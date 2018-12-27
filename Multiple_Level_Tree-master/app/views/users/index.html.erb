@@ -1,0 +1,34 @@
+<h1>MLM Logic - Chitresh Goyal</h1>
+<%# @all_children.each do |child| %>
+<%# end %>
+<%#= tree_ul(@all_children) {|item| link_to h(item.name), :action => 'edit', :id => item } %>
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <script type="text/javascript" src="jquery.js"></script>
+  <script type="text/javascript">
+      $(document).ready(function(){
+          $("p").click(function(){
+              $(this).hide();
+          });
+      });
+  </script>
+</head>
+<body>
+<p align="center">If you click on me, I will disappear.</p>
+
+<%= form_for(@user) do |f| %>
+    <%= f.label "Name" %>
+    <%= f.text_field :name %>
+    <%= f.label "Parent" %>
+    <%= f.collection_select(:parent_id,User.all,:id,:name) %>
+    <%= f.submit "Create" %>
+<% end %>
+<p><%= params[:notice] %><%= params[:error] %></p>
+<p>Chitresh Goyal</p>
+
+</body>
+</html>
+<%= display_categories(@root).html_safe %>

@@ -1,0 +1,7 @@
+<%= form_for(@user) do |f| %>
+    <%= f.label "Name" %>
+    <%= f.text_field :name %>
+    <%#= f.label "Parent" %>
+    <%#= f.collection_select(:parent_id,User.all,:id,:name) %>
+    <%= f.submit "Update" %>
+<% end %>

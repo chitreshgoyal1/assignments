@@ -1,0 +1,27 @@
+MLM Logic - By Chitresh Goyal
+http://www.facebook.com/chitresh.goyal
+
+gem:
+       'acts_as_tree'
+       'mysql'
+rails: 
+       '3.2.6'
+
+Tree View:
+                                                 A
+                                                 |
+                                   ------------------------------
+                                   |             |             |
+                                   B             C             D
+                                   |
+                            ----------------
+                            |             |
+                            B1            B2
+                            |             
+                     ---------------
+                     |             |
+                     B11           B12
+
+N level possible
+N child possible
+N subchildren possible
