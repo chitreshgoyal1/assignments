@@ -20,10 +20,14 @@ end
 puts reverse("hello").join("")
 
 
+def palindrome?(word)
+  word==word.reverse
+end
+puts palindrome?("rajadjar")
+
 def palindrome(word)
   word=word.split("") if word.is_a?(String) 
   return true if word.empty?
   word.first == word.last && palindrome(word[1...-1])
 end
-
 puts palindrome("rajadjar")
