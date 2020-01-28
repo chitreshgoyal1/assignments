@@ -1,5 +1,9 @@
-Using Ruby generate an N x N grid, 
-where N can be any number, and 
+Boggle in ruby
+
+Using Ruby generate an N x N grid,
+
+where N can be any number, and
+
 randomly populate the grid with letters (A-Z).
 
 Using the provided dictionary "dict.txt" file find all: 
