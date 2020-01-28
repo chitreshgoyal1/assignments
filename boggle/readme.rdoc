@@ -1,0 +1,13 @@
+Using Ruby generate an N x N grid, 
+where N can be any number, and 
+randomly populate the grid with letters (A-Z).
+
+Using the provided dictionary "dict.txt" file find all: 
+      Horizontal words from left to right in your grid
+      Horizontal words from right to left in your grid
+      Vertical words from top to bottom in your grid
+      Vertical words from bottom to top in your grid
+      Diagonal words from left to right (top to bottom) in your grid
+      Diagonal words from left to right (bottom to top) in your grid 
+      Diagonal words from right to left (top to bottom) in your grid
+      Diagonal words from right to left (bottom to top) in your grid
