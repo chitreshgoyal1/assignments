@@ -1,0 +1,35 @@
+=begin
+  given two rectangle
+  intersecting or overlaping together in any corner
+  determine total area for two rectangle without overlapped
+ 
+  top left xy bottom right xy
+  top left xy bottom right xy
+
+  7 7 17 17
+  10 11 19 22
+=end
+
+first_rect = gets.chomp.split
+second_rect = gets.chomp.split
+
+l1 = { "x"=> first_rect[0].to_i, "y"=> first_rect[1].to_i }
+r1 = { "x"=> first_rect[2].to_i, "y"=> first_rect[3].to_i }
+l2 = { "x"=> second_rect[0].to_i, "y"=> second_rect[1].to_i }
+r2 = { "x"=> second_rect[2].to_i, "y"=> second_rect[3].to_i } 
+
+ def overlappingArea(l1, r1, l2, r2) 
+    # Area of 1st Rectangle 
+    area1 = (l1["x"] - r1["x"]).abs * (l1["y"] - r1["y"]).abs
+  
+    # Area of 2nd Rectangle 
+    area2 = (l2["x"] - r2["x"]).abs * (l2["y"] - r2["y"]).abs 
+    
+    # Intersection area
+    areaI = ( [r1["x"],r2["x"]].min - [l1["x"],l2["x"]].max ) * ([r1["y"],r2["y"]].min - [l1["y"],l2["y"]].max )
+    
+    # Area without overlapping
+    return area1 + area2 - areaI
+end
+
+    puts overlappingArea(l1, r1, l2, r2) 
