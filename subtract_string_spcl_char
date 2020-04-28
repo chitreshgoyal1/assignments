@@ -1,0 +1,23 @@
+=begin
+  given two string S1,S2
+  delete from s2 all those characters which occure in s1. 
+  s2-s1
+
+  also remove comma, (), dot
+  ignore case
+
+  and finally create a clean s2 with the 
+
+  Ensure Customer Success
+  core
+
+  nsu ustm Suss
+=end
+
+s1 = "((Ensure Cus,t.omer S,ucc.ess))"
+s2 = "core"
+
+str_without_spcl_char = s1.tr('(),.', '')
+s2+=s2.upcase
+result = str_without_spcl_char.delete(s2)
+puts result
