@@ -1,0 +1,84 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV Parser</title>
+</head>
+<body>
+<p>
+    This code is able to parse CSV with a comma delimiter and also it can handle separator delimiter if it occurs in between strings. For example:
+    <br><br>
+    <strong>sample.csv</strong>
+    <pre>
+data_load_metadata_id,identities,devices,datasets,attributes
+,120  00,"quick brown,fox,jumps",4,100
+    </pre>
+    <strong>Expected Output:</strong>
+    <pre>
+[
+  [
+    "data_load_metadata_id",
+    "identities",
+    "devices",
+    "datasets",
+    "attributes"
+  ],
+  [
+    "",
+    "120  00",
+    "quick brown,fox,jumps",
+    "4",
+    "100"
+  ]
+]
+    </pre>
+  </p>
+  <h1>Upload and Parse CSV File</h1>
+  <input type="file" id="fileInput" accept=".csv">
+  <pre id="output"></pre>
+
+  <script>
+    document.getElementById('fileInput').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const contents = e.target.result;
+          const rows = parseCSV(contents);
+          document.getElementById('output').textContent = JSON.stringify(rows, null, 2);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    function parseCSV(data) {
+      const lines = data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      return lines.map(line => parseCSVLine(line));
+    }
+
+    function parseCSVLine(line) {
+      const result = [];
+      let field = '';
+      let insideQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"' && (i === 0 || line[i - 1] !== '\\')) {
+          insideQuotes = !insideQuotes;
+        } else if (char === ',' && !insideQuotes) {
+          result.push(field);
+          field = '';
+        } else {
+          field += char;
+        }
+      }
+      result.push(field);
+
+      return result;
+    }
+  </script>
+</body>
+</html>
