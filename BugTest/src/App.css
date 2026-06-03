@@ -1,0 +1,199 @@
+/* ── Layout ── */
+.app {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.calculator {
+  background: #16213e;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  width: 320px;
+}
+
+.calculator-title {
+  color: #e0e0e0;
+  font-size: 14px;
+  font-weight: 400;
+  text-align: center;
+  margin-bottom: 16px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* ── Display ── */
+.display {
+  background: #0f3460;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  position: relative;
+  /* BUG-018: overflow is visible so long numbers spill out */
+  overflow: visible;
+}
+
+.display-expression {
+  color: #7a8ba0;
+  font-size: 14px;
+  min-height: 20px;
+}
+
+.display-value {
+  color: #e0e0e0;
+  font-size: 36px;
+  font-weight: 300;
+  word-break: break-all;
+}
+
+.memory-indicator {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  color: #e94560;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Keypad ── */
+.keypad {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.keypad-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Buttons ── */
+.calc-btn {
+  flex: 1;
+  height: 56px;
+  border: none;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.1s, transform 0.1s;
+  /* BUG-020: no :focus style — keyboard navigation gives no visible focus indicator */
+}
+
+.calc-btn:active {
+  transform: scale(0.95);
+  opacity: 0.8;
+}
+
+.calc-btn--default {
+  background: #1a4a6b;
+  color: #e0e0e0;
+}
+
+.calc-btn--operator {
+  background: #e94560;
+  color: #fff;
+}
+
+.calc-btn--equals {
+  background: #0f9b58;
+  color: #fff;
+}
+
+.calc-btn--function {
+  background: #253b55;
+  color: #a0b4c8;
+}
+
+.calc-btn--memory {
+  background: #1e3a52;
+  color: #6c9ec4;
+  font-size: 13px;
+}
+
+/* BUG-021: .wide only makes the button 2× flex — but the class is applied to every button */
+.wide {
+  flex: 2;
+}
+
+/* ── History Panel ── */
+.history-panel {
+  background: #16213e;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  width: 260px;
+  max-height: 540px;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.history-header h3 {
+  color: #e0e0e0;
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.history-clear-btn {
+  background: transparent;
+  border: 1px solid #e94560;
+  color: #e94560;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.history-list {
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-empty {
+  color: #4a6a7a;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 24px;
+}
+
+.history-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid #1e3a52;
+  padding-bottom: 10px;
+}
+
+.history-expression {
+  color: #7a8ba0;
+  font-size: 13px;
+}
+
+.history-result {
+  color: #e0e0e0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.history-time {
+  color: #4a6a7a;
+  font-size: 11px;
+}

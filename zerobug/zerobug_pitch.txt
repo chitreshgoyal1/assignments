@@ -1,0 +1,489 @@
+================================================================================
+                              ZEROBUG
+             Autonomous AI-Powered Bug Fixing & Remediation Platform
+================================================================================
+
+
+WHAT IS ZEROBUG?
+--------------------------------------------------------------------------------
+
+ZeroBug is a conversational, agentic platform that autonomously fixes software
+bugs and security vulnerabilities end-to-end. Engineers describe a problem in
+plain language — a crash, a CVE, a failing test — and ZeroBug takes over:
+
+  - Connects to your GitHub / GitLab / Jira
+  - Reads the codebase and issue context
+  - Diagnoses the root cause using Claude (via AWS Bedrock)
+  - Writes and tests a fix in a secure, isolated sandbox
+  - Opens a pull request with the fix
+  - Requests human approval before merging
+  - Deploys to production after approval
+
+ZeroBug is not a chatbot. It is a fully autonomous engineering agent with a
+human-in-the-loop approval gate — designed to compress the time from "bug
+reported" to "fix shipped" from hours or days to minutes.
+
+
+================================================================================
+ARCHITECTURE — END TO END
+================================================================================
+
+ZeroBug is a three-tier serverless architecture deployed on AWS:
+
+    ┌──────────────────────────────────────────────────────────┐
+    │                    FRONTEND (React)                       │
+    │  Chat interface · Activity sidebar · Approval cards       │
+    └─────────────────────────┬────────────────────────────────┘
+                              │  HTTPS (REST)
+    ┌─────────────────────────▼────────────────────────────────┐
+    │              API LAMBDA (FastAPI + Mangum)                │
+    │  Session management · Credential storage · Routing        │
+    │  AWS API Gateway → Lambda Proxy                           │
+    └──────────────┬──────────────────────────────┬────────────┘
+                   │  Invoke (sync)               │  DynamoDB R/W
+    ┌──────────────▼──────────────┐   ┌───────────▼────────────┐
+    │     RUNTIME LAMBDA          │   │       DYNAMODB          │
+    │  Claude conversation loop   │   │  zerobug-sessions table │
+    │  AWS Bedrock Converse API   │   │  (KMS-encrypted at rest)│
+    │  XML tag parsing            │   └────────────────────────┘
+    │  Activity logging           │
+    │  SNS approval notifications │
+    └──────────────┬──────────────┘
+                   │  Invoke (sync, per code block)
+    ┌──────────────▼──────────────┐   ┌────────────────────────┐
+    │      SANDBOX LAMBDA         │   │          S3             │
+    │  Secure Python execution    │◄──│  Artifact exchange      │
+    │  VPC-isolated               │   │  zerobug-artifacts-*    │
+    │  Regex blocklist validation │   └────────────────────────┘
+    │  30-second timeout          │
+    └─────────────────────────────┘
+
+Supporting AWS services:
+  - KMS       — encrypts credentials and session data at rest
+  - SNS       — sends approval email notifications
+  - VPC + NAT — isolates sandbox; single egress path for monitoring
+  - API Gateway — public HTTPS endpoint for the frontend
+
+
+================================================================================
+TECH STACK
+================================================================================
+
+BACKEND
+  Language          Python 3.12
+  Web framework     FastAPI (+ Mangum for Lambda adapter)
+  LLM               Claude Sonnet 4.5 via AWS Bedrock Converse API
+  IaC               AWS CDK (Python)
+  DB client         Boto3 (DynamoDB)
+  GitHub client     PyGithub
+  Jira client       jira (Python)
+  GitLab client     python-gitlab
+  HTTP client       requests
+  Diff tooling      unidiff, patch-ng
+  Config parsing    PyYAML, toml
+
+FRONTEND
+  Framework         React 18.3
+  Build tool        Vite
+  Styling           TailwindCSS
+  Markdown render   react-markdown
+  Date utils        date-fns
+
+INFRASTRUCTURE (AWS)
+  Compute           AWS Lambda (3 functions)
+  Database          Amazon DynamoDB (on-demand, KMS-encrypted)
+  AI/ML             Amazon Bedrock (Claude Sonnet 4.5)
+  Messaging         Amazon SNS
+  Storage           Amazon S3
+  Encryption        AWS KMS
+  Networking        API Gateway, VPC, NAT Gateway, Security Group
+  Runtime layer     AWS Lambda Layer (pre-installed Python packages)
+
+
+================================================================================
+DETAILED FLOW OF THE PROJECT (WITH FUNCTIONS)
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 1 — USER STARTS A SESSION
+────────────────────────────────────────────────────────────────────────────────
+
+  Frontend (SetupScreen.jsx)
+    → User enters API credentials (GitHub PAT, Jira token, etc.)
+    → POST /api/sessions/{session_id}/credentials  (one per credential)
+      API Lambda: routes/credentials.py
+        → Encrypts value with KMS
+        → Stores {"GITHUB_PAT": "<encrypted_b64>"} in DynamoDB sessions table
+
+  Frontend (Chat.jsx)
+    → POST /api/sessions  (creates a new UUID session)
+      API Lambda: routes/chat.py → db/session.py → DynamoDB
+        → Returns {session_id, status: "active"}
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 2 — USER DESCRIBES THE BUG
+────────────────────────────────────────────────────────────────────────────────
+
+  Frontend → POST /api/sessions/{session_id}/message  {content: "Fix the SQL
+             injection in users.py in repo acme/backend"}
+
+  API Lambda (routes/chat.py)
+    → _invoke_runtime(session_id, message)
+    → Calls Runtime Lambda (synchronous invoke)
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 3 — RUNTIME LAMBDA: CLAUDE CONVERSATION LOOP
+────────────────────────────────────────────────────────────────────────────────
+
+  runtime/handler.py  →  _lambda_handler_inner(session_id, user_message)
+
+    1. _load_session()
+         Reads conversation history, credentials, context from DynamoDB
+
+    2. Appends user message to conversation list
+
+    3. _call_bedrock(conversation, system_prompt)
+         Calls AWS Bedrock Converse API with ZEROBUG_SYSTEM_PROMPT
+         Model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+         Max tokens: 4096
+
+    4. Claude responds with natural language PLUS XML tags:
+         <execute>python code here</execute>   ← code to run
+         <ask>question for user</ask>          ← needs clarification
+         <approval_needed>{...}</approval_needed>  ← ready to merge
+         <done>summary</done>                  ← task complete
+
+    5. Extract all <execute> blocks → _find(response_text, "execute")
+
+    6. For each code block → _invoke_sandbox(session_id, code)
+         Calls Sandbox Lambda (synchronous invoke)
+         Appends result as a "user" message back to conversation
+         Calls Bedrock again → up to 10 iterations per request
+
+    7. _log_activity(session_id, label, icon, status, detail)
+         Writes timestamped activity entry to DynamoDB activity log
+
+    8. If <approval_needed> tag found:
+         Publishes SNS notification (email to approval address)
+         Sets session status → "awaiting_approval"
+         Stores approval_items in DynamoDB
+
+    9. If <done> tag found:
+         Sets session status → "completed"
+
+   10. _strip_tags(response)  — removes XML from user-facing message
+
+   11. _save_session(session_id, conversation, context, status, ...)
+         Atomic write back to DynamoDB
+
+   12. Returns {message, status, approval_items, type} to API Lambda
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 4 — SANDBOX LAMBDA: SECURE CODE EXECUTION
+────────────────────────────────────────────────────────────────────────────────
+
+  sandbox/executor.py  →  lambda_handler(event, context)
+
+    1. _validate(code)
+         Regex blocklist check — blocks:
+           subprocess, socket, ctypes, nested eval/exec,
+           AWS metadata endpoint (169.254.169.254),
+           file writes outside /tmp
+
+    2. Decrypt and inject credentials as environment variables
+         (scoped to this invocation only, cleaned up after)
+
+    3. _exec_with_timeout(code, exec_globals, timeout=30)
+         Runs code in a daemon thread
+         Extracts RESULT variable from exec globals
+         Enforces 30-second hard timeout
+
+    4. Classify errors (auth_error, timeout, network_timeout,
+         network_error, library_not_available, validation_error)
+
+    5. Returns {error, detail, output, result}  to Runtime Lambda
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 5 — APPROVAL WORKFLOW
+────────────────────────────────────────────────────────────────────────────────
+
+  Claude identifies the fix is ready → emits <approval_needed> tag
+    {summary, prs: [{url, title, repo}], test_env_url, changes: [...]}
+
+  SNS sends email to approval_email (configured at deploy time)
+
+  Frontend shows ApprovalCard.jsx with PR links and change summary
+
+  User clicks "Approve" in chat UI
+    → POST /api/sessions/{session_id}/approve  {approved: true}
+    → API Lambda calls Runtime with:
+       "User approved all items. Proceed with merge and production deploy."
+    → Runtime generates merge + deploy code, runs in sandbox
+    → Session moves to "completed"
+
+  Alternatively: programmatic approval via
+    POST /api/webhooks/approve  (Slack bot, CI system, etc.)
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 6 — FRONTEND UPDATES
+────────────────────────────────────────────────────────────────────────────────
+
+  Chat.jsx polls / receives response
+    → Renders assistant message (react-markdown)
+    → Shows ApprovalCard if status = "awaiting_approval"
+    → ActivitySidebar.jsx shows real-time timeline:
+         [icon] Searched GitHub for issue  ✓
+         [icon] Read users.py              ✓
+         [icon] Generated fix              ✓
+         [icon] Opened PR #42              ✓
+         [icon] Awaiting approval          ⏳
+
+
+================================================================================
+API SERVICES — ALL ENDPOINTS
+================================================================================
+
+BASE PATH: /api   (served via API Gateway → zerobug-api Lambda)
+
+  SESSION MANAGEMENT
+  ──────────────────
+  POST   /sessions
+         Create new session → {session_id, status: "active"}
+
+  POST   /sessions/{session_id}/message
+         Send user message to Claude → {message, status, approval_items, type}
+
+  GET    /sessions/{session_id}
+         Get session status and metadata (no conversation history)
+
+  GET    /sessions/{session_id}/messages
+         Get full conversation history → [{role, content, ts}]
+
+  GET    /sessions/{session_id}/activity
+         Get structured activity timeline → [{id, ts, label, icon, status}]
+
+  POST   /sessions/{session_id}/approve
+         Approve or reject a pending item → triggers merge + deploy
+
+  CREDENTIALS
+  ───────────
+  POST   /sessions/{session_id}/credentials
+         Store a KMS-encrypted credential {key, value}
+
+  GET    /sessions/{session_id}/credentials/keys
+         List stored credential key names only (values never returned)
+
+  DELETE /sessions/{session_id}
+         Hard-delete session and all associated credentials
+
+  WEBHOOKS
+  ────────
+  POST   /webhooks/approve
+         Programmatic approval from external systems (Slack, CI)
+         Requires WEBHOOK_SECRET header
+
+  HEALTH
+  ──────
+  GET    /health
+         Checks DynamoDB, Bedrock, and Sandbox Lambda connectivity
+
+
+================================================================================
+AWS RESOURCES USED
+================================================================================
+
+  RESOURCE              NAME / IDENTIFIER                PURPOSE
+  ─────────────────────────────────────────────────────────────────────────────
+  Lambda (API)          zerobug-api                      FastAPI HTTP handler
+  Lambda (Runtime)      zerobug-runtime                  Claude conversation loop
+  Lambda (Sandbox)      zerobug-sandbox                  Safe code execution
+  Lambda Layer          zerobug-sandbox-libs             Pre-installed Python deps
+  DynamoDB Table        zerobug-sessions                 Sessions, conversations,
+                                                         credentials, activity
+  KMS Key               alias/zerobug                    Encrypt credentials &
+                                                         session data at rest
+  SNS Topic             zerobug-approvals                Email approval notifications
+  S3 Bucket             zerobug-artifacts-{account}      Artifact exchange between
+                                                         Runtime and Sandbox
+  API Gateway           zerobug-api                      Public REST endpoint
+  VPC                   SandboxVpc                       Isolates Sandbox Lambda
+  NAT Gateway           (in SandboxVpc)                  Single egress for sandbox
+                                                         (monitorable)
+  Security Group        SandboxSG                        HTTPS (443) egress only
+                                                         to allowlisted domains
+  IAM Roles             (per Lambda)                     Least-privilege execution
+                                                         roles for each function
+  Amazon Bedrock        Claude Sonnet 4.5                LLM inference
+                        (us.anthropic.claude-sonnet-
+                         4-5-20250929-v1:0)
+
+
+================================================================================
+AGENT DETAILS
+================================================================================
+
+MODEL
+  Provider:    Anthropic Claude via Amazon Bedrock
+  Model ID:    us.anthropic.claude-sonnet-4-5-20250929-v1:0
+  API:         Bedrock Converse API (non-streaming, synchronous)
+  Max tokens:  4096 per turn
+  Loop limit:  10 Bedrock calls per user message (tool-use loop)
+
+SYSTEM PROMPT  (runtime/system_prompt.py → ZEROBUG_SYSTEM_PROMPT)
+  The system prompt is Claude's operating manual. It:
+  - Defines Claude's role: autonomous bug-fixing agent, not a chatbot
+  - Lists available XML control tags and their semantics
+  - Lists available libraries in the sandbox
+  - Specifies code structure requirements (RESULT variable, etc.)
+  - Sets tone: direct, professional, action-oriented
+
+XML CONTROL PROTOCOL
+  Claude communicates intent through XML tags embedded in its response:
+
+    <execute>...</execute>
+      Python code to run in the Sandbox Lambda.
+      Output assigned to RESULT variable.
+
+    <ask>...</ask>
+      Requests clarification from the user before proceeding.
+
+    <approval_needed>
+      {
+        "summary": "Plain-language description of the fix",
+        "prs": [{"url": "...", "title": "...", "repo": "..."}],
+        "test_env_url": "https://staging.example.com",
+        "changes": ["file: description of change"]
+      }
+    </approval_needed>
+      Signals that a fix is ready, pauses execution, triggers SNS email,
+      and surfaces ApprovalCard in the UI.
+
+    <done>...</done>
+      Marks the task complete. Sets session status → "completed".
+
+AGENTIC LOOP
+  1. User message arrives
+  2. Claude generates a response with zero or more <execute> blocks
+  3. Each block is sent to the Sandbox Lambda
+  4. Sandbox result is appended as a "user" message
+  5. Claude is called again with the updated context
+  6. Loop repeats until Claude emits <done> or <approval_needed>,
+     or the 10-iteration limit is reached
+
+EXTERNAL SYSTEMS CLAUDE CAN ACCESS (via sandbox code)
+  - GitHub       (PyGithub)       — repos, PRs, commits, file reads
+  - GitLab       (python-gitlab)  — MRs, pipelines, file reads
+  - Jira         (jira)           — issues, transitions, comments
+  - Any REST API (requests)       — generic HTTP calls
+  - AWS S3       (boto3)          — artifact reads/writes
+  - Diff tools   (unidiff,        — parse and apply patches
+                  patch-ng)
+
+SANDBOX SECURITY
+  Blocklist (regex-validated before execution):
+    subprocess, socket, ctypes, nested eval/exec,
+    AWS metadata endpoint (169.254.169.254),
+    writes outside /tmp
+
+  Safe builtins only: print, len, range, enumerate, zip,
+    dict, list, str, int, float, bool, type, isinstance, etc.
+
+  Network: HTTPS (443) egress only via NAT Gateway
+  Timeout: 30 seconds (daemon thread)
+  Max output: 64 KB
+  Credential scope: injected per invocation, cleaned up immediately after
+
+
+================================================================================
+BENEFITS
+================================================================================
+
+FOR ENGINEERING TEAMS
+  - Reduces mean-time-to-fix from hours/days to minutes
+  - No context switching — describe the bug in English, get a PR back
+  - Handles repetitive fix patterns autonomously (sanitization, null checks,
+    dependency upgrades, config changes)
+  - Works across GitHub, GitLab, and Jira without custom integrations
+  - Human approval gate ensures no code ships without sign-off
+
+FOR SECURITY TEAMS
+  - CVE remediation at machine speed — scan, patch, PR, done
+  - Credential handling is encrypted at rest (KMS) and never returned via API
+  - Sandbox prevents Claude's generated code from accessing the host system
+  - Audit trail: every action is logged in the DynamoDB activity timeline
+
+FOR ENTERPRISES
+  - Fully serverless — pay only for what you use, scales to zero
+  - VPC isolation and single-egress NAT for network monitoring and compliance
+  - Least-privilege IAM roles per Lambda
+  - No credentials stored in code — all injected via encrypted DynamoDB entries
+  - Deployable in any AWS region in under 30 minutes via CDK
+
+PRODUCTIVITY
+  - Engineers stay in the chat UI — no need to open GitHub, Jira, and the IDE
+    simultaneously
+  - Claude explains its reasoning in plain English alongside the code changes
+  - Activity sidebar gives real-time visibility into what the agent is doing
+
+
+================================================================================
+FUTURE SCOPE
+================================================================================
+
+NEAR-TERM (3–6 months)
+  - Streaming responses  — Bedrock supports streaming; wire it to the frontend
+    for real-time token output instead of waiting for full responses
+  - User authentication  — Add Cognito or OAuth2; sessions are currently
+    UUID-based with no login
+  - Rate limiting        — Per-session and per-IP throttling on API Gateway
+  - Audit logging        — CloudTrail + structured logs to CloudWatch Insights
+  - Multi-step approvals — Two-person approval (maker/checker) for high-risk
+    changes
+
+MEDIUM-TERM (6–12 months)
+  - Multi-tenant isolation — Separate DynamoDB partitions and KMS keys per org
+  - Webhook integrations  — Slack bot ("@zerobug fix issue #123"),
+    GitHub Actions trigger, PagerDuty integration
+  - Test generation       — Claude writes unit/integration tests alongside the
+    fix, runs them in sandbox before opening PR
+  - CI/CD awareness       — Read pipeline status, re-trigger builds, watch
+    test results, auto-merge on green
+  - Memory / context      — Persist repo-level context across sessions so
+    Claude accumulates knowledge of the codebase over time
+
+LONG-TERM (12+ months)
+  - Proactive bug detection — Schedule ZeroBug to scan repos nightly, surface
+    potential issues before they become incidents
+  - Multi-model support    — Plug in GPT-4o or Gemini as alternative backends
+    via a model abstraction layer
+  - IDE extension          — VS Code / JetBrains plugin to invoke ZeroBug
+    from the editor without leaving the IDE
+  - Self-improving prompts — Track fix success rates, A/B test system prompt
+    variations, auto-tune the agent over time
+  - Compliance mode        — HIPAA / SOC2 / PCI-DSS guardrails: Claude refuses
+    to touch sensitive data fields without explicit policy approval
+
+
+================================================================================
+DEPLOYMENT QUICK REFERENCE
+================================================================================
+
+  Prerequisites: Python 3.12, Node.js, AWS CLI, AWS CDK
+
+  # Install infra dependencies
+  pip install -r infra/requirements.txt
+
+  # Pre-package sandbox Lambda layer
+  pip install -r layer/requirements.txt -t layer/python --no-cache-dir
+
+  # Deploy to AWS (replace email with your approval address)
+  cd infra
+  cdk deploy --context approval_email=your@example.com
+
+  # Local development
+  docker run -p 8000:8000 amazon/dynamodb-local          # Local DynamoDB
+  cd api && uvicorn main:app --reload --port 8000         # API server
+  cd frontend && npm install && npm run dev               # React dev server
+
+
+================================================================================

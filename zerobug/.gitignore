@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+.venv/
+venv/
+env/
+ENV/
+.env
+!.env.example
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+.cache/
+.parcel-cache/
+
+# CDK
+cdk.out/
+*.js.map
+*.d.ts
+!jest.config.js
+
+# AWS
+.aws-sam/
+samconfig.toml
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Logs
+*.log
+logs/
+
+# Lambda build artifacts
+*.zip
+layer/
+
+# User uploads (local dev storage for /api/sessions/{id}/files)
+.uploads/

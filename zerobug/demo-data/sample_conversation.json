@@ -1,0 +1,30 @@
+{
+  "description": "Full conversation trace for demo-001 (GitHub PR summary)",
+  "turns": [
+    {
+      "role": "user",
+      "content": "Summarize all open pull requests in my GitHub repo and tell me which ones are stale (no activity in 7+ days)."
+    },
+    {
+      "role": "assistant",
+      "content": "Sure! A couple of quick questions:\n\n1. What is the GitHub repo owner and name? (e.g. `acme-corp/backend-api`)\n2. Do you have a GitHub personal access token I can use, or should I use one from your environment?"
+    },
+    {
+      "role": "user",
+      "content": "It's acme-corp/backend-api. Use the GITHUB_TOKEN env var."
+    },
+    {
+      "role": "assistant",
+      "type": "approval_request",
+      "content": "Here's what I'm going to do:\n\n1. Call the GitHub API to list all open PRs in `acme-corp/backend-api`\n2. For each PR, check the `updated_at` timestamp — flag any with no activity in 7+ days\n3. Return a Markdown summary table\n\nI'll use the `GITHUB_TOKEN` environment variable. No data will be written. **Shall I proceed?**"
+    },
+    {
+      "role": "user",
+      "content": "Approved"
+    },
+    {
+      "role": "assistant",
+      "content": "Done! Here's the summary:\n\n| PR | Author | Last Activity | Stale? |\n|----|--------|--------------|--------|\n| #142 Fix login redirect | @alice | 2 days ago | No |\n| #138 Add dark mode | @bob | 9 days ago | **Yes** |\n| #131 Refactor auth middleware | @carol | 12 days ago | **Yes** |\n\n2 stale PRs found: #138 and #131."
+    }
+  ]
+}

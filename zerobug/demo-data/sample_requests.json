@@ -1,0 +1,32 @@
+[
+  {
+    "id": "demo-001",
+    "label": "GitHub PR summary",
+    "user_message": "Summarize all open pull requests in my GitHub repo and tell me which ones are stale (no activity in 7+ days).",
+    "notes": "Triggers clarifying question about repo name/owner, then generates GitHub API calls at runtime."
+  },
+  {
+    "id": "demo-002",
+    "label": "CSV data analysis",
+    "user_message": "I have a sales CSV at s3://my-bucket/sales-q1.csv. Give me a breakdown by region and flag any rows where revenue is negative.",
+    "notes": "Triggers clarifying questions about columns, then generates pandas analysis code at runtime."
+  },
+  {
+    "id": "demo-003",
+    "label": "Slack digest",
+    "user_message": "Pull the last 50 messages from the #engineering Slack channel and give me a bullet-point summary of decisions made.",
+    "notes": "Triggers clarifying question about Slack token/workspace, generates Slack API calls at runtime."
+  },
+  {
+    "id": "demo-004",
+    "label": "Database query",
+    "user_message": "Find all users who signed up in the last 30 days but have never made a purchase.",
+    "notes": "Triggers clarifying questions about DB type/schema, generates SQL at runtime."
+  },
+  {
+    "id": "demo-005",
+    "label": "File transformation",
+    "user_message": "Convert all JSON files in the /exports folder to CSV format.",
+    "notes": "Generates file conversion script at runtime, asks for approval before writing files."
+  }
+]
